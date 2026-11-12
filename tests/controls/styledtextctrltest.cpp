@@ -17,6 +17,7 @@
     #include "wx/app.h"
 #endif // WX_PRECOMP
 
+#include "wx/platinfo.h"
 #include "wx/stc/stc.h"
 #include "wx/uiaction.h"
 
@@ -197,12 +198,21 @@ TEST_CASE("wxStyledTextCtrl::Bidirectional", "[wxStyledTextCtrl][rtl]")
     stc->SendMsg(SCI_SETBIDIRECTIONAL, SC_BIDIRECTIONAL_L2R);
     REQUIRE( stc->SendMsg(SCI_GETBIDIRECTIONAL) == SC_BIDIRECTIONAL_L2R );
 
-    // "ab" followed by Hebrew letters alef, bet and gimel at positions 2, 4
-    // and 6: the latter are displayed from right to left, so the caret
-    // positions before each of them go leftwards.
-    stc->SetText(wxString::FromUTF8("ab\xd7\x90\xd7\x91\xd7\x92"));
-    CHECK( stc->PointFromPosition(4).x < stc->PointFromPosition(2).x );
-    CHECK( stc->PointFromPosition(6).x < stc->PointFromPosition(4).x );
+    // DirectWrite hit testing doesn't work under Wine, which returns the
+    // same position for all characters.
+    if ( wxIsRunningUnderWine() )
+    {
+        WARN("Skipping checking bidirectional layout under Wine.");
+    }
+    else
+    {
+        // "ab" followed by Hebrew letters alef, bet and gimel at positions
+        // 2, 4 and 6: the latter are displayed from right to left, so the
+        // caret positions before each of them go leftwards.
+        stc->SetText(wxString::FromUTF8("ab\xd7\x90\xd7\x91\xd7\x92"));
+        CHECK( stc->PointFromPosition(4).x < stc->PointFromPosition(2).x );
+        CHECK( stc->PointFromPosition(6).x < stc->PointFromPosition(4).x );
+    }
 
     stc->SetTechnology(wxSTC_TECHNOLOGY_DEFAULT);
     CHECK( stc->SendMsg(SCI_GETBIDIRECTIONAL) == SC_BIDIRECTIONAL_DISABLED );
