@@ -1086,6 +1086,8 @@ private:
     SurfaceD2D &operator=(const SurfaceD2D &);
 
     bool m_unicodeMode;
+    // Lay out and draw text with a right-to-left base direction.
+    bool m_bidiR2L;
     int m_x, m_y;
     int m_logPixelsY;
 
@@ -1111,6 +1113,7 @@ SurfaceD2D::SurfaceD2D()
     : m_pDWriteFactory(::wxDWriteFactory())
 {
     m_unicodeMode = false;
+    m_bidiR2L = false;
     m_x = 0;
     m_y = 0;
     m_logPixelsY = 72;
@@ -1705,7 +1708,8 @@ IDWriteTextFormat* TextFormatOf(const Font* font)
 class ScreenLineLayout : public IScreenLineLayout
 {
 public:
-    ScreenLineLayout(IDWriteFactory* factory, const IScreenLine* screenLine);
+    ScreenLineLayout(IDWriteFactory* factory, const IScreenLine* screenLine,
+                     bool bidiR2L);
 
     size_t PositionFromX(XYPOSITION xDistance, bool charPosition) override;
     XYPOSITION XFromPosition(size_t caretPosition) override;
@@ -1732,7 +1736,8 @@ private:
     wxDECLARE_NO_COPY_CLASS(ScreenLineLayout);
 };
 
-ScreenLineLayout::ScreenLineLayout(IDWriteFactory* factory, const IScreenLine* screenLine)
+ScreenLineLayout::ScreenLineLayout(IDWriteFactory* factory, const IScreenLine* screenLine,
+                                   bool bidiR2L)
 {
     if ( !factory || !screenLine || !screenLine->Length() )
         return;
@@ -1757,6 +1762,11 @@ ScreenLineLayout::ScreenLineLayout(IDWriteFactory* factory, const IScreenLine* s
         m_textLayout.reset();
         return;
     }
+
+    // With a right-to-left base direction, the line is also aligned to the
+    // right of the screen line's width.
+    if ( bidiR2L )
+        m_textLayout->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
 
     FillTextLayoutFormats(screenLine);
 }
@@ -1902,7 +1912,7 @@ std::vector<Interval> ScreenLineLayout::FindRangeIntervals(size_t start, size_t 
 std::unique_ptr<IScreenLineLayout> SurfaceD2D::Layout(const IScreenLine* screenLine)
 {
     return std::unique_ptr<IScreenLineLayout>(
-        new ScreenLineLayout(m_pDWriteFactory.get(), screenLine));
+        new ScreenLineLayout(m_pDWriteFactory.get(), screenLine, m_bidiR2L));
 }
 
 void SurfaceD2D::DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase,
@@ -2119,8 +2129,9 @@ void SurfaceD2D::SetDBCSMode(int WXUNUSED(codePage_))
 {
 }
 
-void SurfaceD2D::SetBidiR2L(bool WXUNUSED(bidiR2L_))
+void SurfaceD2D::SetBidiR2L(bool bidiR2L_)
 {
+    m_bidiR2L = bidiR2L_;
 }
 
 void SurfaceD2D::SetFont(Font &font_)
@@ -2222,6 +2233,12 @@ void SurfaceD2D::DrawTextCommon(PRectangle rc, Font &font_, XYPOSITION ybase,
 
         if ( SUCCEEDED(hr) )
         {
+            // Scintilla draws each run of a right-to-left line separately,
+            // and spaces and punctuation at the ends of a run only end up on
+            // the same side as in the line with the same base direction.
+            if ( m_bidiR2L )
+                pTextLayout->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
+
             D2D1_POINT_2F origin = {rc.left, ybase-m_yAscent};
             m_pRenderTarget->DrawTextLayout(origin, pTextLayout, m_pSolidBrush,
                 D2D1_DRAW_TEXT_OPTIONS_NONE);
