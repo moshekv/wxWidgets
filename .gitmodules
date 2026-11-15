@@ -32,8 +32,8 @@
 	branch = wx
 [submodule "src/stc/scintilla"]
 	path = src/stc/scintilla
-	url = https://github.com/wxWidgets/scintilla.git
-	branch = wx
+	url = https://github.com/moshekv/scintilla.git
+	branch = rtl-test-pilot
 [submodule "src/stc/lexilla"]
 	path = src/stc/lexilla
 	url = https://github.com/wxWidgets/lexilla.git
